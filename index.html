@@ -3,64 +3,91 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PC Control Panel</title>
+    <title>PC Control</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
-        .btn { background: #2481cc; border: none; color: white; padding: 15px; border-radius: 10px; font-size: 16px; width: 100%; margin: 8px 0; cursor: pointer; transition: 0.2s; }
-        .btn:active { background: #1a5c91; transform: scale(0.98); }
-        .btn-red { background: #d9534f; }
-        .status-card { background: #2a2a2a; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #444; display: flex; justify-content: space-around; }
-        .stat-item { flex: 1; }
-        .val { font-size: 20px; font-weight: bold; color: #2ecc71; }
+        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: white; margin: 0; padding: 20px; }
+        .status-card { background: #1e1e1e; padding: 15px; border-radius: 12px; display: flex; justify-content: space-around; margin-bottom: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); }
+        .val { font-size: 22px; font-weight: bold; color: #00d2ff; }
+        .label { font-size: 11px; text-transform: uppercase; opacity: 0.6; }
+        .btn { background: #2481cc; border: none; color: white; padding: 16px; border-radius: 10px; font-size: 16px; width: 100%; margin: 8px 0; cursor: pointer; font-weight: bold; }
+        .btn-red { background: #ff4757; }
+        
+        /* ОКНА (СКРИН И ЗАДАЧИ) */
+        .overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 100; overflow-y: auto; padding: 10px; box-sizing: border-box; }
+        .close-x { position: fixed; top: 15px; right: 15px; font-size: 30px; cursor: pointer; color: #ff4757; font-weight: bold; z-index: 101; }
+        #screenImg { width: 100%; border-radius: 8px; margin-top: 40px; }
+        
+        /* ПРОЦЕССЫ */
+        .proc-item { background: #1e1e1e; margin: 5px 0; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .kill-btn { background: #ff4757; border: none; color: white; padding: 6px 12px; border-radius: 5px; }
     </style>
 </head>
 <body>
-    <h3>💻 СИСТЕМА УПРАВЛЕНИЯ</h3>
-    
     <div class="status-card">
-        <div class="stat-item">
-            <div id="cpu" class="val">--%</div>
-            <div style="font-size: 12px;">CPU</div>
-        </div>
-        <div class="stat-item">
-            <div id="ram" class="val">--%</div>
-            <div style="font-size: 12px;">RAM</div>
-        </div>
+        <div style="text-align:center"><div id="cpu" class="val">--%</div><div class="label">CPU</div></div>
+        <div style="text-align:center"><div id="ram" class="val">--%</div><div class="label">RAM</div></div>
     </div>
 
     <button class="btn" onclick="sendCommand('screenshot')">📸 Сделать скриншот</button>
-    <button class="btn" onclick="sendCommand('update_tasks')">🖥 Обновить диспетчер</button>
+    <button class="btn" onclick="openTasks()">🖥 Диспетчер задач</button>
     <button class="btn btn-red" onclick="window.Telegram.WebApp.close()">❌ Выйти</button>
+
+    <div id="screenOverlay" class="overlay">
+        <span class="close-x" onclick="closeOverlay('screenOverlay')">×</span>
+        <img id="screenImg" src="" alt="Ожидание скриншота...">
+        <p style="text-align:center">Нажмите × чтобы вернуться</p>
+    </div>
+
+    <div id="tasksOverlay" class="overlay">
+        <span class="close-x" onclick="closeOverlay('tasksOverlay')">×</span>
+        <h3 style="margin-top:40px">Активные процессы</h3>
+        <div id="taskList">Загрузка...</div>
+    </div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-
         const DB_URL = "https://pc-console-e6ed8-default-rtdb.firebaseio.com/.json";
 
-        // Функция отправки команды
-        function sendCommand(cmd) {
-            fetch(DB_URL, {
-                method: 'PATCH',
-                body: JSON.stringify({ command: cmd })
-            }).then(() => {
-                // Вместо QR-кода просто меняем текст кнопки на время
-                console.log("Команда отправлена: " + cmd);
-            });
+        function sendCommand(cmd, target = "") {
+            fetch(DB_URL, { method: 'PATCH', body: JSON.stringify({ command: cmd, target: target }) });
+            if(cmd === 'screenshot') document.getElementById('screenOverlay').style.display = 'block';
         }
 
-        // ЖИВОЕ ОБНОВЛЕНИЕ СТАТУСА
+        function closeOverlay(id) { document.getElementById(id).style.display = 'none'; }
+
+        function openTasks() {
+            document.getElementById('tasksOverlay').style.display = 'block';
+            sendCommand('get_tasks');
+        }
+
+        // ЖИВОЙ ЦИКЛ ОБНОВЛЕНИЯ
         setInterval(() => {
-            fetch(DB_URL)
-                .then(r => r.json())
-                .then(data => {
-                    if (data) {
-                        document.getElementById('cpu').innerText = (data.cpu || 0) + "%";
-                        document.getElementById('ram').innerText = (data.ram || 0) + "%";
-                        document.getElementById('cpu').style.color = data.cpu > 70 ? "#ff4757" : "#2ecc71";
-                    }
-                });
+            fetch(DB_URL).then(r => r.json()).then(data => {
+                if (!data) return;
+                // Обновляем CPU/RAM
+                document.getElementById('cpu').innerText = (data.cpu || 0) + "%";
+                document.getElementById('ram').innerText = (data.ram || 0) + "%";
+                
+                // Проверяем скриншот (если в базе есть URL картинки или сигнал)
+                if(data.last_screen) {
+                    document.getElementById('screenImg').src = data.last_screen + "?t=" + new Date().getTime();
+                }
+
+                // Обновляем список задач
+                if(data.procs) {
+                    let html = '';
+                    data.procs.forEach(p => {
+                        let color = p.cpu > 15 ? "#ff4757" : (p.cpu > 5 ? "#ffa502" : "#2ecc71");
+                        html += `<div class="proc-item" style="border-left: 4px solid ${color}">
+                            <span>${p.name} (${p.cpu}%)</span>
+                            <button class="kill-btn" onclick="sendCommand('kill', '${p.name}')">❌</button>
+                        </div>`;
+                    });
+                    document.getElementById('taskList').innerHTML = html;
+                }
+            });
         }, 2000);
     </script>
 </body>
