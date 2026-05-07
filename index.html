@@ -1,225 +1,75 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Лёха-Контроль</title>
+    <title>Leha Control</title>
+    <link rel="stylesheet" href="style.css">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <style>
-        :root {
-            --bg: #0f0f10;
-            --card: #1c1c1e;
-            --accent: #2481cc;
-            --danger: #ff453a;
-            --success: #32d74b;
-            --warning: #ff9f0a;
-            --text: #ffffff;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
-            margin: 0;
-            padding: 15px;
-            user-select: none;
-            overflow-x: hidden;
-            display: block; /* Гарантируем, что тело страницы видно */
-        }
-
-        /* Шапка с CPU/RAM */
-        .status-header {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-
-        .stat-card {
-            background: var(--card);
-            padding: 15px;
-            border-radius: 12px;
-            text-align: center;
-            border: 1px solid #333;
-        }
-
-        .stat-val {
-            font-size: 24px;
-            font-weight: 800;
-            color: var(--success);
-            display: block;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            text-transform: uppercase;
-            opacity: 0.5;
-            margin-top: 5px;
-        }
-
-        /* Кнопки управления */
-        .main-btn {
-            background: var(--accent);
-            border: none;
-            color: white;
-            padding: 18px;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
-            width: 100%;
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            cursor: pointer;
-        }
-
-        .main-btn:active { transform: scale(0.98); opacity: 0.9; }
-
-        /* Блок Диспетчера задач (теперь он прямо на странице, но скрыт) */
-        #tasksBlock {
-            display: none; /* Скрыт по умолчанию */
-            margin-top: 20px;
-            border-top: 1px solid #333;
-            padding-top: 20px;
-        }
-
-        .header-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        /* Списки процессов */
-        h4 { margin: 20px 0 10px 0; font-size: 14px; opacity: 0.6; text-transform: uppercase; }
-        
-        .proc-item {
-            background: var(--card);
-            margin-bottom: 8px;
-            padding: 12px;
-            border-radius: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-left: 4px solid var(--accent);
-        }
-
-        .proc-info div:first-child { font-weight: 600; font-size: 14px; margin-bottom: 3px; }
-        .proc-info div:last-child { font-size: 12px; opacity: 0.6; }
-
-        .kill-x {
-            background: rgba(255, 69, 58, 0.1);
-            color: var(--danger);
-            border: 1px solid var(--danger);
-            padding: 5px 12px;
-            border-radius: 6px;
-            font-weight: bold;
-            cursor: pointer;
-        }
-    </style>
 </head>
 <body>
 
-    <div class="status-header">
+    <div class="status-row">
         <div class="stat-card">
             <span id="cpu" class="stat-val">--%</span>
-            <span class="stat-label">Процессор</span>
+            <span class="stat-label">CPU</span>
         </div>
         <div class="stat-card">
             <span id="ram" class="stat-val">--%</span>
-            <span class="stat-label">Память</span>
+            <span class="stat-label">RAM</span>
         </div>
     </div>
 
-    <button class="main-btn" onclick="sendCommand('screenshot')">📸 Сделать скриншот</button>
-    <button class="main-btn" onclick="toggleTasks()">🖥 Диспетчер задач</button>
-    <button class="main-btn" style="background: #333;" onclick="window.Telegram.WebApp.close()">🚪 Выход</button>
+    <button class="btn" onclick="sendCommand('screenshot')">📸 Скриншот</button>
+    <button class="btn" onclick="toggleTasks()">🖥 Диспетчер задач</button>
+    <button class="btn btn-secondary" onclick="tg.close()">🚪 Выход</button>
 
     <div id="tasksBlock">
-        <div class="header-row">
-            <h3>Активные процессы</h3>
-        </div>
-        <div id="taskList">
-            <p style="opacity:0.5; font-size:12px;">Загрузка данных...</p>
-        </div>
+        <h3 style="margin-top:0">Процессы</h3>
+        <div id="taskList">Ожидание данных от Лёхи...</div>
     </div>
 
     <script>
         const tg = window.Telegram.WebApp;
-        if (tg.expand) tg.expand(); // Расширяем, если мы в Mini App
+        tg.expand();
 
         const DB_URL = "https://pc-console-e6ed8-default-rtdb.firebaseio.com/.json";
-
-        // Глобальная переменная для отслеживания, открыт ли диспетчер
-        let isTasksOpen = false;
+        let tasksVisible = false;
 
         function sendCommand(cmd, target = "") {
             fetch(DB_URL, {
                 method: 'PATCH',
                 body: JSON.stringify({ command: cmd, target: target })
             });
-            // Показываем уведомление (работает и в браузере, и в Mini App)
-            if(cmd === 'screenshot') alert("Запрос на скриншот отправлен Лёхе!");
-            if(cmd === 'kill') alert("Приказ на ликвидацию " + target + " принят!");
         }
 
         function toggleTasks() {
-            const block = document.getElementById('tasksBlock');
-            isTasksOpen = !isTasksOpen; // Меняем статус
-            if (isTasksOpen) {
-                block.style.display = 'block'; // Показываем
-                sendCommand('get_tasks'); // Просим ПК обновить список
-            } else {
-                block.style.display = 'none'; // Скрываем
-            }
+            tasksVisible = !tasksVisible;
+            document.getElementById('tasksBlock').style.display = tasksVisible ? 'block' : 'none';
+            if(tasksVisible) sendCommand('get_tasks');
         }
 
-        // Вспомогательная функция для рендера строки процесса
-        function createProcRow(p, color) {
-            return `
-                <div class="proc-item" style="border-left-color: ${color}">
-                    <div class="proc-info">
-                        <div>${p.name}</div>
-                        <div>CPU: ${p.cpu}% | RAM: ${p.mem}%</div>
-                    </div>
-                    <button class="kill-x" onclick="sendCommand('kill', '${p.name}')">❌</button>
-                </div>
-            `;
-        }
-
-        // ЖИВОЙ ЦИКЛ ОБНОВЛЕНИЯ (каждые 3 секунды)
         setInterval(() => {
             fetch(DB_URL).then(r => r.json()).then(data => {
                 if (!data) return;
-
-                // 1. Обновляем статус CPU/RAM (работает всегда)
                 document.getElementById('cpu').innerText = (data.cpu || 0) + "%";
                 document.getElementById('ram').innerText = (data.ram || 0) + "%";
-                // Меняем цвет, если нагрузка высокая
-                document.getElementById('cpu').style.color = data.cpu > 80 ? "#ff453a" : "#32d74b";
 
-                // 2. Обновляем список задач (только если блок открыт)
-                if(data.procs && isTasksOpen) {
-                    let html = '<h4>📂 Приложения (с окнами)</h4>';
-                    if(data.procs.apps && data.procs.apps.length > 0) {
-                        data.procs.apps.forEach(p => html += createProcRow(p, "#32d74b")); // Зеленая полоска
-                    } else {
-                        html += '<p style="font-size:12px; opacity:0.5; margin-left:10px;">Нет активных окон</p>';
+                if(data.procs && tasksVisible) {
+                    let html = '';
+                    // Приложения
+                    if(data.procs.apps) {
+                        data.procs.apps.forEach(p => {
+                            html += `<div class="proc-item">
+                                <div class="proc-info"><b>${p.name}</b><span>CPU: ${p.cpu}% | RAM: ${p.mem}%</span></div>
+                                <button class="kill-btn" onclick="sendCommand('kill', '${p.name}')">❌</button>
+                            </div>`;
+                        });
                     }
-
-                    html += '<h4>⚙️ Фоновые процессы (топ по CPU)</h4>';
-                    if(data.procs.bg && data.procs.bg.length > 0) {
-                        data.procs.bg.forEach(p => html += createProcRow(p, "#ff9f0a")); // Оранжевая полоска
-                    } else {
-                        html += '<p style="font-size:12px; opacity:0.5; margin-left:10px;">Нет данных</p>';
-                    }
-                    document.getElementById('taskList').innerHTML = html;
+                    document.getElementById('taskList').innerHTML = html || 'Нет данных';
                 }
-            }).catch(e => console.error("Ошибка Firebase:", e));
-        }, 3000);
+            });
+        }, 2000);
     </script>
 </body>
 </html>
