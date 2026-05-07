@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PC Control Panel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
+        .btn { background: #2481cc; border: none; color: white; padding: 15px 30px; border-radius: 10px; font-size: 18px; width: 100%; margin: 10px 0; cursor: pointer; }
+        .btn-red { background: #d9534f; }
+        .status-card { background: #2a2a2a; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #444; }
+    </style>
+</head>
+<body>
+    <h2>💻 PC REMOTE</h2>
+    <div class="status-card">
+        <p id="cpu">CPU: Загрузка...</p>
+        <p id="ram">RAM: Загрузка...</p>
+    </div>
+
+    <button class="btn" onclick="sendCommand('screenshot')">📸 Сделать скриншот</button>
+    <button class="btn btn-red" onclick="closeApp()">❌ Закрыть панель</button>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+
+        const DB_URL = "https://pc-console-e6ed8-default-rtdb.firebaseio.com/.json";
+
+        function sendCommand(cmd) {
+            fetch(DB_URL, {
+                method: 'PATCH',
+                body: JSON.stringify({ command: cmd })
+            }).then(() => {
+                tg.showScanQrPopup({ text: "Команда отправлена!" });
+                setTimeout(() => tg.closeScanQrPopup(), 1000);
+            });
+        }
+
+        function closeApp() { tg.close(); }
+    </script>
+</body>
+</html>
