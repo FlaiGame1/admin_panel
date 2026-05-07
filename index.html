@@ -7,38 +7,61 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { font-family: sans-serif; background: #1a1a1a; color: white; text-align: center; padding: 20px; }
-        .btn { background: #2481cc; border: none; color: white; padding: 15px 30px; border-radius: 10px; font-size: 18px; width: 100%; margin: 10px 0; cursor: pointer; }
+        .btn { background: #2481cc; border: none; color: white; padding: 15px; border-radius: 10px; font-size: 16px; width: 100%; margin: 8px 0; cursor: pointer; transition: 0.2s; }
+        .btn:active { background: #1a5c91; transform: scale(0.98); }
         .btn-red { background: #d9534f; }
-        .status-card { background: #2a2a2a; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #444; }
+        .status-card { background: #2a2a2a; padding: 15px; border-radius: 15px; margin-bottom: 20px; border: 1px solid #444; display: flex; justify-content: space-around; }
+        .stat-item { flex: 1; }
+        .val { font-size: 20px; font-weight: bold; color: #2ecc71; }
     </style>
 </head>
 <body>
-    <h2>💻 PC REMOTE</h2>
+    <h3>💻 СИСТЕМА УПРАВЛЕНИЯ</h3>
+    
     <div class="status-card">
-        <p id="cpu">CPU: Загрузка...</p>
-        <p id="ram">RAM: Загрузка...</p>
+        <div class="stat-item">
+            <div id="cpu" class="val">--%</div>
+            <div style="font-size: 12px;">CPU</div>
+        </div>
+        <div class="stat-item">
+            <div id="ram" class="val">--%</div>
+            <div style="font-size: 12px;">RAM</div>
+        </div>
     </div>
 
     <button class="btn" onclick="sendCommand('screenshot')">📸 Сделать скриншот</button>
-    <button class="btn btn-red" onclick="closeApp()">❌ Закрыть панель</button>
+    <button class="btn" onclick="sendCommand('update_tasks')">🖥 Обновить диспетчер</button>
+    <button class="btn btn-red" onclick="window.Telegram.WebApp.close()">❌ Выйти</button>
 
     <script>
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
+        tg.expand();
 
         const DB_URL = "https://pc-console-e6ed8-default-rtdb.firebaseio.com/.json";
 
+        // Функция отправки команды
         function sendCommand(cmd) {
             fetch(DB_URL, {
                 method: 'PATCH',
                 body: JSON.stringify({ command: cmd })
             }).then(() => {
-                tg.showScanQrPopup({ text: "Команда отправлена!" });
-                setTimeout(() => tg.closeScanQrPopup(), 1000);
+                // Вместо QR-кода просто меняем текст кнопки на время
+                console.log("Команда отправлена: " + cmd);
             });
         }
 
-        function closeApp() { tg.close(); }
+        // ЖИВОЕ ОБНОВЛЕНИЕ СТАТУСА
+        setInterval(() => {
+            fetch(DB_URL)
+                .then(r => r.json())
+                .then(data => {
+                    if (data) {
+                        document.getElementById('cpu').innerText = (data.cpu || 0) + "%";
+                        document.getElementById('ram').innerText = (data.ram || 0) + "%";
+                        document.getElementById('cpu').style.color = data.cpu > 70 ? "#ff4757" : "#2ecc71";
+                    }
+                });
+        }, 2000);
     </script>
 </body>
 </html>
