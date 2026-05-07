@@ -24,6 +24,7 @@
             padding: 15px;
             user-select: none;
             overflow-x: hidden;
+            display: block; /* Гарантируем, что тело страницы видно */
         }
 
         /* Шапка с CPU/RAM */
@@ -72,38 +73,24 @@
             justify-content: center;
             gap: 10px;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            cursor: pointer;
         }
 
         .main-btn:active { transform: scale(0.98); opacity: 0.9; }
 
-        /* Окно диспетчера и скрина */
-        .overlay {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: var(--bg);
-            z-index: 1000;
-            padding: 20px;
-            box-sizing: border-box;
-            overflow-y: auto;
+        /* Блок Диспетчера задач (теперь он прямо на странице, но скрыт) */
+        #tasksBlock {
+            display: none; /* Скрыт по умолчанию */
+            margin-top: 20px;
+            border-top: 1px solid #333;
+            padding-top: 20px;
         }
 
         .header-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
-        }
-
-        .close-btn {
-            font-size: 32px;
-            color: var(--danger);
-            background: none;
-            border: none;
-            cursor: pointer;
+            margin-bottom: 15px;
         }
 
         /* Списки процессов */
@@ -130,9 +117,109 @@
             padding: 5px 12px;
             border-radius: 6px;
             font-weight: bold;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="status-header">
+        <div class="stat-card">
+            <span id="cpu" class="stat-val">--%</span>
+            <span class="stat-label">Процессор</span>
+        </div>
+        <div class="stat-card">
+            <span id="ram" class="stat-val">--%</span>
+            <span class="stat-label">Память</span>
+        </div>
+    </div>
+
+    <button class="main-btn" onclick="sendCommand('screenshot')">📸 Сделать скриншот</button>
+    <button class="main-btn" onclick="toggleTasks()">🖥 Диспетчер задач</button>
+    <button class="main-btn" style="background: #333;" onclick="window.Telegram.WebApp.close()">🚪 Выход</button>
+
+    <div id="tasksBlock">
+        <div class="header-row">
+            <h3>Активные процессы</h3>
+        </div>
+        <div id="taskList">
+            <p style="opacity:0.5; font-size:12px;">Загрузка данных...</p>
+        </div>
+    </div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        if (tg.expand) tg.expand(); // Расширяем, если мы в Mini App
+
+        const DB_URL = "https://pc-console-e6ed8-default-rtdb.firebaseio.com/.json";
+
+        // Глобальная переменная для отслеживания, открыт ли диспетчер
+        let isTasksOpen = false;
+
+        function sendCommand(cmd, target = "") {
+            fetch(DB_URL, {
+                method: 'PATCH',
+                body: JSON.stringify({ command: cmd, target: target })
+            });
+            // Показываем уведомление (работает и в браузере, и в Mini App)
+            if(cmd === 'screenshot') alert("Запрос на скриншот отправлен Лёхе!");
+            if(cmd === 'kill') alert("Приказ на ликвидацию " + target + " принят!");
         }
 
-        #screenImg { width: 100%; border-radius: 10px; margin-top: 10px; border: 1px solid #333; }
-    </style>
-</
- 
+        function toggleTasks() {
+            const block = document.getElementById('tasksBlock');
+            isTasksOpen = !isTasksOpen; // Меняем статус
+            if (isTasksOpen) {
+                block.style.display = 'block'; // Показываем
+                sendCommand('get_tasks'); // Просим ПК обновить список
+            } else {
+                block.style.display = 'none'; // Скрываем
+            }
+        }
+
+        // Вспомогательная функция для рендера строки процесса
+        function createProcRow(p, color) {
+            return `
+                <div class="proc-item" style="border-left-color: ${color}">
+                    <div class="proc-info">
+                        <div>${p.name}</div>
+                        <div>CPU: ${p.cpu}% | RAM: ${p.mem}%</div>
+                    </div>
+                    <button class="kill-x" onclick="sendCommand('kill', '${p.name}')">❌</button>
+                </div>
+            `;
+        }
+
+        // ЖИВОЙ ЦИКЛ ОБНОВЛЕНИЯ (каждые 3 секунды)
+        setInterval(() => {
+            fetch(DB_URL).then(r => r.json()).then(data => {
+                if (!data) return;
+
+                // 1. Обновляем статус CPU/RAM (работает всегда)
+                document.getElementById('cpu').innerText = (data.cpu || 0) + "%";
+                document.getElementById('ram').innerText = (data.ram || 0) + "%";
+                // Меняем цвет, если нагрузка высокая
+                document.getElementById('cpu').style.color = data.cpu > 80 ? "#ff453a" : "#32d74b";
+
+                // 2. Обновляем список задач (только если блок открыт)
+                if(data.procs && isTasksOpen) {
+                    let html = '<h4>📂 Приложения (с окнами)</h4>';
+                    if(data.procs.apps && data.procs.apps.length > 0) {
+                        data.procs.apps.forEach(p => html += createProcRow(p, "#32d74b")); // Зеленая полоска
+                    } else {
+                        html += '<p style="font-size:12px; opacity:0.5; margin-left:10px;">Нет активных окон</p>';
+                    }
+
+                    html += '<h4>⚙️ Фоновые процессы (топ по CPU)</h4>';
+                    if(data.procs.bg && data.procs.bg.length > 0) {
+                        data.procs.bg.forEach(p => html += createProcRow(p, "#ff9f0a")); // Оранжевая полоска
+                    } else {
+                        html += '<p style="font-size:12px; opacity:0.5; margin-left:10px;">Нет данных</p>';
+                    }
+                    document.getElementById('taskList').innerHTML = html;
+                }
+            }).catch(e => console.error("Ошибка Firebase:", e));
+        }, 3000);
+    </script>
+</body>
+</html>
